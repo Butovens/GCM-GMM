@@ -1,4 +1,4 @@
-# Grawth Curve Models / Growth Mixture Models
+# Growth Curve Models / Growth Mixture Models
 
 ## These are examples of Growth Curve Model and Growth Mixture Model in R.
 
