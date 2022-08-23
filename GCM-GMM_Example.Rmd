@@ -1,0 +1,340 @@
+---
+title: "Growth Curve Models / Growth Mixture Models"
+author: "Butovens Médé"
+date: "10/29/2020"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+## Loading packages
+```{r setup}
+# install.packages("lavaan", dependencies = T)
+library(lavaan)
+# install.packages("tidyverse", dependencies = T)
+library(tidyverse)
+# install.packages("skimr", dependencies = T)
+library(skimr)
+# install.packages("Hmisc")
+# install.packages("semPlot", dependencies = T)
+library(semPlot) # to create visuals of models
+# install.packages("lcmm", dependencies = T)
+library(lcmm) # For GMM models
+```
+
+## Growth Curve Modeling: Loading data
+```{r}
+## Load GCM data
+GCM_data <- read.table(file.choose(), header = F)
+
+## Skim data
+skim(GCM_data)
+
+## Change column name and Add participant ID number
+GCM_data_ID <- GCM_data %>% 
+  rename(Time_0 = V1,
+         Time_1 = V2,
+         Time_2 = V3,
+         Time_3 = V4) %>% 
+  add_column(.before = T, participant = 1:3000)
+
+## Skim transformed data
+skim(GCM_data_ID)
+```
+
+
+## 1
+```{r}
+## set seed for reproducibility
+set.seed(2020)
+GCM_data_small <- slice_sample(GCM_data_ID, n = 200)
+
+## rearrange data set from 'wide' format to 'long' format for plotting  
+GCM_data_small_lng <- GCM_data_small %>% 
+  pivot_longer(`Time_0`:`Time_3`, names_to = "time", values_to = "score") %>%  
+  mutate(participant = as_factor(participant), time = as_factor(time))
+
+## Plot the data
+ggplot(data = GCM_data_small_lng, 
+               aes(x=time, y=score)) +
+  geom_point() +
+  geom_line(aes(group = participant)) +
+  labs(title = "Science aptitude scores among HS students over 4 years",
+       subtitle = "Subset of the entire data set",
+       x = "Measurement time",
+       y = "Science aptitude score") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14,
+                                  face = "italic"))
+```
+
+
+Based on visual inspection of a randomly sampled subset of the data set, it appears that I can make a case for a single latent class. There seem to be one overall latent class that is driving (or that can account for) where High School students start in science aptitude as Freshman and how they grow overtime until they are senior.
+
+## 2
+```{r}
+# Linear growth model with 4 timepoints
+# intercept and slope with fixed coefficients
+gcm_model <- '
+# intercept
+i =~ 1*Time_0 + 1*Time_1 + 1*Time_2 + 1*Time_3
+
+#slope
+s =~ 0*Time_0 + 1*Time_1 + 2*Time_2 + 3*Time_3 
+'
+```
+
+```{r}
+## Model fit
+fit <- growth(model= gcm_model, data = GCM_data_ID)
+
+## Model summary
+summary(fit, fit.measures = TRUE)
+
+```
+
+
+```{r}
+## Model visualization
+semPaths(fit, what = "paths", whatLabels = "par")
+```
+
+Fit indices:
+
+* Chi-square: Here we have a none significant Chi-square value. This can be taken as an indication of good model fit as the Chi-square "goodness of fit test" tests for the difference between the observed and expected values given the assumption of the specific distribution that generated the data. It tests for the difference between the observed and implied covariance matrix.
+
+*Note: However Chi-square test is usually impacted by smaple size so it is recommended to put less weight on the test and rely on additional fit indices*
+
+* CFI/TLI: The CLI assumes that all latent variables are uncorrelated (null/independence model) and compares the sample covariance matrix with this null model. Here the result of 1 indicates a very good fit. The TLI which is also a relative fit index indicates that the model is a good fit (i.e. value of 1).
+
+* RMSEA: Here the RMSEA which is an absolute measure of fit indicates a close model fit because it's value is below .05 (i.e. 016).
+
+* SRMR: The SRMR is also an absolute measure of fit. This fit indice provides an estimate of the average misfit for each estimated versus observed variance/covariance parameter. Thus, the closer to zero the better. Here we have a value of .003 which broadly suggests good fit of the model as well.  
+
+```{r}
+# Coefficient
+coef(fit)
+```
+
+**Latent Growth Factors**
+
+* The intercept value: This represents the average predicted science aptitude score for the entire sample of high school students at the first time of measurement (i.e. Freshman year). Here it is of 49.884 and it is statistically significant.
+
+* The slope value: This represents the predicted average growth of the science aptitude score for the entire sample of high school students for every year spent in high school. Here it is of 10.001 and it is also statistically significant.
+
+* The variance values: These are the estimated variances of intercept, slope, and each of the repeated measures. The variance in the intercept is sizable (variance), however it appears that there is not as much variance in the slope (i.e. variance = 2)
+
+* The covariance value: Here it indicates that there is no significant covariation between the disturbances for the intercept and slope parameters (or growth factors).
+
+## Question 3
+The analysis indicates that high school students at their first year of high school start with an aptitude science score that is around 49 on average. However, there seem to be a substantial variation in those scores at the start, with some students having a score below 40 and others having a score above 60.The majority of the science aptitude scores for incoming Freshman are between 40 and 60 points. The variance of those score in Freshman year is 18 with p < .05. 
+The rate of growth in those scores for those student is about 10 additional points per year spent in high school. That rate of growth seems to be fairly consistent and similar across students as indicated by the lower variation in growth aptitude science scores among students for every year spent in high school (i.e. 2 with p < .05).
+
+
+## Growth Mixture Modeling: Loading data
+```{r}
+## Load GMM data
+GMM_data <- read.table(file.choose(), header = F)
+
+## Skim data
+skim(GMM_data)
+
+## Change column name and Add participant ID number
+GMM_data_ID <- GMM_data %>% 
+  rename(Time_0 = V1,
+         Time_1 = V2,
+         Time_2 = V3,
+         Time_3 = V4,
+         Time_4 = V5) %>% 
+  add_column(.before = T, participant = 1:8500)
+
+## Skim transformed data
+skim(GMM_data_ID)
+```
+
+
+## 1
+```{r}
+## set seed for reproducibility
+set.seed(2021)
+GMM_data_small <- slice_sample(GMM_data_ID, n = 600)
+
+## rearrange data set from 'wide' format to 'long' format for plotting  
+GMM_data_small_lng <- GMM_data_small %>% 
+  pivot_longer(`Time_0`:`Time_4`, names_to = "time", values_to = "score") %>%  
+  mutate(participant = as_factor(participant), time = as_factor(time))
+
+## Plot the data
+ggplot(data = GMM_data_small_lng, 
+               aes(x=time, y=score)) +
+  geom_point() +
+  geom_line(aes(group = participant)) +
+  labs(title = "Improvement in Depression among adults over 5 time-points",
+       subtitle = "Higher scores mean more improvement and therefore decreased depression levels",
+       caption = "Subset of the entire data set",
+       x = "Measurement time",
+       y = "Depression score") +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14,
+                                  face = "italic"))
+```
+
+Based on visual inspection, it seems that we could make the case for multiple latent classes. In this data set, there seems to be at least 2 distinct groups and potentially 3 or 4. These groups appear to show similar rate of improvement (although it is hard to tell from the visual alone). However, there is definitely a distinct starting points in depression score among those group. Some adults started with a low depression score (e.g. below 45) which means they started with a fairly high level of depression. this can constitute one groups. Others started with a mild level of depression indicated by scores between 45 and 65. This can constitute a second group. The remaining started with low level of depression, indicated by a score above 65. This may also constitute another group.
+
+## 2
+
+### Model 1
+
+| Table | Estimate | S.E. | Est./ S.E | p=value |
+|-----|-----|-----|-----|-----|
+| Intercept class1 | 93.852 | 0.253 | 370.593 | 0.000 |
+| slope class1 | 3.031 | 0.070 | 43.584 | 0.000 |
+| Intercept class2 | 58.311 | 0.137 | 424.775 | 0.000 |
+| slope class2 | 5.311 | 0.020 | 272.266 | 0.000 |
+
+|Table|  |
+|-----|-----|
+| covariance Intercept & Slope | 10.524 |
+| variance intercept |138.048 |
+| variance slope | 2.915 |
+
+
+Model 1 assumes classes 2 latent classes, 
+fixed residual variances for the repeated measures in the data same across,
+same variance in intercept and slope across groups,  
+same covariances between intercept and slope between groups, 
+and linear growth pattern with equal time spacing. 
+
+For class 1: we have a mean	 depression score of about 93 for the intercept and a slope ~ 3, but only about 6% of people are in that group
+For class 2: we have a mean depression score of about 58 for the intercept and a slope ~ 5.3, and about 93% of people are in that group
+
+
+
+### Model 2
+
+| Table | Estimate | S.E. | Est./ S.E | p=value |
+|-----|-----|-----|-----|-----|
+| Intercept class1 | 55.107 | 0.059 | 935.844 | 0.000 |
+| slope class1 | 5.025 | 0.019 | 267.264 | 0.000 |
+| Intercept class2 | 81.972 | 0.187 | 437.598 | 0.000 |
+| slope class2 | 6.093 | 0.048 | 126.283 | 0.000 |
+| Intercept class3 | 31.862 | 0.210 | 151.651 | 0.000 |
+| slope class3 | 2.915 | 0.065 | 44.570 | 0.000 |
+
+|Table|  |
+|-----|-----|
+| covariance Intercept & Slope | -2.983 |
+| variance intercept | 31.412 |
+| variance slope | 2.710 |
+
+Model 2 assumes 3 latent classes
+Other parameters are similar to model 1
+
+For class 1: we have a mean depression score of about 55 for the intercept and a slope ~ 5, and about 70% of people are in that group
+For class 2: we have a mean depression score of about 82 for the intercept and a slope ~ 6, and about 25% of people are in that group
+For class 3: we have a mean depression score of about 32 for the intercept and a slope ~ 3, and about 5% of people are in that group
+
+
+### Model 3
+
+| Table | Estimate | S.E. | Est./ S.E | p=value |
+|-----|-----|-----|-----|-----|
+| Intercept class1 | 55.046 | 0.057 | 967.365 | 0.000 |
+| slope class1 | 5.024 | 0.019 | 266.470 | 0.000 |
+| Intercept class2 | 31.845 | 0.204 | 155.848 | 0.000 |
+| slope class2 | 2.955 | 0.065 | 45.224 | 0.000 |
+| Intercept class3 | 77.930 | 0.112 | 694.138 | 0.000 |
+| slope class3 | 6.990 | 0.036 | 193.888 | 0.000 |
+| Intercept class4 | 94.820 | 0.199 | 476.518 | 0.000 |
+| slope class4 | 3.014 | 0.067 | 45.215 | 0.000 |
+
+|Table|  |
+|-----|-----|
+| covariance Intercept & Slope | 0.059 |
+| variance intercept | 18.178 |
+| variance slope | 2.024 | 
+
+Model 3 assumes 4 latent classes
+Other parameters are similar to model 1
+
+For class 1: we have a mean depression score of about 55 for the intercept and a slope ~ 5, and about 70% of people are in that group
+For class 2: we have a mean depression score of about 31 for the intercept and a slope ~ 3, and about 5% of people are in that group
+For class 3: we have a mean depression score of about 78 for the intercept and a slope ~ 7, and about 20% of people are in that group
+For class 4: we have a mean depression score of about 94 for the intercept and a slope ~ 3, and about 5% of people are in that group
+
+#### Model comparison
+| Info criteria | LogLik | AIC | BIC | SABIC | %class1 | %class2 | %class3 | %class4 |
+|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| M1 | -94034.804 | 188095.609 | 188187.231 |  188145.919  |  0.06024 | 0.93976 |    |    |
+| M2 | -92736.146 | 185504.293 | 185617.058 | 185566.213 | 0.69997 | 0.24585 | 0.05418|   |
+| M3 | -90910.529 | 181859.057 | 181992.966 |  181932.587 |  0.69606 | 0.05461 | 0.19203 | 0.05730 |
+
+Based on the results of the different information criteria, it appears that model 3 (which assumes 4 latent classes) might be the best model. Its AIC, BIC, SABIC are the lowest of all models.
+
+
+
+## 3
+
+From Nylund, Asparouhov, and Muthen (2007) we know that among the relative fit indices AIC might not be a reliable information criterion because:it tends to overestimate the number of components, there is no adjustment for sample size, and its accuracy decreases as sample size increases. Also Nylund et al. have showed that BIC seems to be the strongest IC when evaluating GMM (for big enough samples). 
+
+However these findings have to be contrasted with the ones by Tofighi and Enders. They found that the BIC performs really poorly when classes are not well-separated. They recommended 
+using the Sample-Adjusted BIC instead for GMM; although they acknowledged that we should use caution when interpreting their findings because their population model might have been more complex that other model found in applied practice. 
+
+Here all information criteria seem to agree and suggest that 4 latent classes is the most optimal solution. Even though there seems to be very few people in latent class 2 and 4, it still seems to make sense. All classes have very distinct means which do not overlap (even when taking standard error into account). In addition latent class 2 & 4 are on both ends of the spectrum. Taking that a whole, it looks like the depression scores follow a normal distribution with most of the scores at the center and a few at the extreme. The rate of growth for class 2 and 4 (which are similar and lowest) can also make sense given the right interpretation. For people in class 2 who start with a very low depression score (i.e. they are very depressed) maybe it is harder for them to get better so they do not show as much improvement as the other adults suffering from depression. On the other side for adults who are not so depressed and start with a very high depression score akin to people in class 4, there might be a ceiling effect, this the improvement rate is shallower that people who started with a lower depression score.
+
+For these reason I think four latent class might be the most optimal solution.
+
+## 4
+
+The results indicate that a 4 latent class model might be the most optimal solution. The first class which constitutes the majority of the sample (about 70%) start on average with a score 55 on the depression scale and have improve at rate of 5 additional points for every time they were measured.  About 5% of the whole sample belong to the second class. These are people who are really depressed and start with an average score of 31. They show improvement at a rate that is inferior to others (about 3 points gain per unit time of measurement). Class 3 has 20% of the total sample. Adults belonging to that group start on average with a score 78 and seem to improve the most among all the other people. They improve at a rate of 7 points per unit time of measurement. The last class has 5% of the sample in it. People in that group start very high on the depression with an average score of 94. This does not leave much room for improvement which might explain the slower growth rate of 3 points per unit time of measurement.	
+
+## Extra: GMM model using lcmm packages (very long to run)
+```{r, cache= TRUE}
+## rearrange data set from 'wide' format to 'long' format for plotting  
+GMM_data_lng <- GMM_data_ID %>% 
+  pivot_longer(`Time_0`:`Time_4`, names_to = "time", values_to = "score") %>%  
+  mutate(participant = as.integer(participant), time = as.integer(recode(time,
+                                                                         Time_0 = 0,
+                                                                         Time_1 = 1,
+                                                                         Time_2 = 2,
+                                                                         Time_3 = 3,
+                                                                         Time_4 = 4))) 
+## Change tibble object back into a data frame
+GMM_df <- GMM_data_lng %>% as.data.frame()   
+
+## Run GMM model using package lcmm
+gmm1 <- hlme(score ~ time, subject = "participant", random=~1 + time, ng = 1, data =GMM_df)
+
+gmm2 <- gridsearch(rep = 100, maxiter = 20, minit = gmm1, hlme(score ~ time, subject = "participant", random=~1 + time, ng = 2, data = GMM_df, mixture = ~ time, nwg=T))
+
+gmm3 <- gridsearch(rep = 100, maxiter = 20, minit = gmm1, hlme(score ~ time, subject = "participant", random=~1+time, ng = 3, data = GMM_df, mixture = ~ time, nwg=T))
+
+gmm4 <- gridsearch(rep = 100, maxiter = 20, minit = gmm1, hlme(score ~ time, subject = "participant", random=~1+time, ng = 4, data = GMM_df, mixture = ~ time, nwg=T))
+```
+
+#### Summary table of the models
+```{r}
+## make table with results for the 3 models: 
+summarytable(gmm1, gmm2, gmm3,gmm4)
+```
+
+It appears that this GMM using the lcmm package gives us a different answer than Mplus. According the the results, it seems that the model assuming 3 latent classes is the best. In addition, the percentage of people in each class is very different from what we found in Mplus for the equivalent model. Here a model assuming 3 latent class has about 14% of people in group 1, 18% of people in group 2 and 68% of people in group 3. Mplus found 70%, 25% and 5% respectively. 
+
+#### Summary of the winning model
+```{r}
+## Looking at the coefficient of the winning model
+summary(gmm3)
+```
+
+It also appears that the coefficients for the intercept and slope found by this package are very different from the one found by the Mplus software. 
+
+According to the 3-latent-class model with the lcmm package, class 1 has a mean depression score of about 63 for the intercept and a slope ~ 4, and about 14% of people are in that group
+Class 2 has a mean depression score of about 78 for the intercept and a slope ~ 7, and about 18% of people are in that group
+Class 3 has a mean depression score of about 54 for the intercept and a slope ~ 5, and about 68% of people are in that group
+
+
+#### Possible explanation for difference
+The possible difference in results between the two software may be due to the slight variation when setting up those models. The number of repetitions and iterations of the model in lcmm might not have been enough to make the ML estimation converge, and find the values that would maximize the likelihood of the parameters. During parameter estimation, the lcmm might have been stuck at local maxima. It is possible to increase the number of repetitions and iterations, but the time it takes to run the model seems to be 5 orders of magnitude higher than a corresponding model with Mplus.   
+
+
